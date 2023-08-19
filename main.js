@@ -13,8 +13,6 @@ module.exports.loop  = function(){
 
   var MainRooms = ["W7N4"]
   var RoomsDictionary = {"W7N4":["W8N4","W6N4","W7N3","W7N5"]}
-
-
 	//-------------------------------------------------------------------------------------
 	//初始化部分
 	//-------------------------------------------------------------------------------------
@@ -33,27 +31,39 @@ module.exports.loop  = function(){
 	//预定模式
 	var claimMode = false;
 
+  	console.log("------循环开始------------------------------------------------")
 
 
 
+    //循环处理所有房间
+  	for(const theRoomName of MainRooms){
 
-
+	console.log(">>>当前房间："+theRoomName)
 	//-------------------------------------------------------------------------------------
 	//内存和建筑管理
 	//-------------------------------------------------------------------------------------
+	var Tower = Game.spawns[theRoomName].room.find(FIND_MY_STRUCTURES, {
+		filter: { structureType: STRUCTURE_TOWER }
+	}); 
 
-	var Tower = 0
+	var container = Game.spawns[theRoomName].room.find(FIND_MY_STRUCTURES, {
+		filter: { structureType: STRUCTURE_CONTAINER }
+	}); 
+
+
 	if(Tower != 0)
-		;//TowerOperator(Tower,roomE56S51);
+		TowerOperator(Tower[0],theRoomName);
 
 	//清除已经死亡的creep内存
 	MemoryManage()
-  if(!Game.rooms[MainRooms[0]].memory.source)
-	  InitSource(MainRooms[0])
-  if(!Game.rooms[MainRooms[0]].memory.sourceSum)
-    InitSourceSum(MainRooms[0])
+  if(!Game.rooms[theRoomName].memory.source)
+	  InitSource(theRoomName)
+  if(Game.rooms[RoomsDictionary[theRoomName][0]] != undefined && !Game.rooms[RoomsDictionary[theRoomName][0]].memory.source )
+	  InitSource(RoomsDictionary[theRoomName][0])
+  if(!Game.rooms[theRoomName].memory.sourceSum)
+    InitSourceSum(theRoomName)
 
-	console.log("能量",Game.rooms[MainRooms[0]].energyAvailable,"/",Game.rooms[MainRooms[0]].energyCapacityAvailable);
+	console.log("能量",Game.rooms[theRoomName].energyAvailable,"/",Game.rooms[theRoomName].energyCapacityAvailable);
 
 
 
@@ -63,34 +73,62 @@ module.exports.loop  = function(){
 
 
   //每种creep的预定最大生产数量,按照优先等级排序。
-  var ECA = Game.rooms[MainRooms[0]].energyCapacityAvailable
-  var creepMax = {
-    "creep_v1": (ECA<550 ) ? 12:0,
-    "creep_v2": (ECA >= 550 && ECA <600) ? 8:0,
-    "harvester_v3_s0":(ECA >= 600)?1:0,
-    "harvester_v3_s1":(ECA >= 600)?1:0
-  }
+  var ECA = Game.rooms[theRoomName].energyCapacityAvailable
+  var EA = Game.rooms[theRoomName].energyAvailable
 
+  
+
+  var creepMax = {
+    "creep_v1": (ECA<550 ) ?                       8 : 0 + 
+				(EA == 300 && Object.keys(Game.creeps).length==0 && ECA > 300),
+    "creep_v2": (ECA >= 550 && ECA <1300) ?         12  : 0,
+	"creep_outside_v2": (ECA >= 550 && ECA <1300) ? 4  : 0,
+    "upgrader_v2":(ECA >= 550 && ECA <800)?       0  : 0,
+    "carrier_v2":(ECA >= 550 && ECA <800)?       0  : 0,
+    "builder_v2":(ECA >= 550 && ECA <800)?       0  : 0,
+    "harvester_v2_s0":(ECA >= 550 && ECA <800)?     0  : 0,
+    "harvester_v2_s1":(ECA >= 550 && ECA <800)?     0  : 0,
+    "harvester_v3_s0":(ECA >= 1300)?                1  : 0,
+    "harvester_v3_s1":(ECA >= 1300)?                1  : 0,
+  }
+  console.log(Object.keys(Game.creeps).length)
   //每种creep的部件设计
   var creepBody = {
     "creep_v1":[MOVE,CARRY,MOVE,CARRY,WORK],
     "creep_v2":[MOVE,MOVE,MOVE,CARRY,CARRY,WORK,WORK,WORK],
+	"creep_outside_v2":[MOVE,MOVE,MOVE,MOVE,CARRY,CARRY,WORK,WORK],
+    "upgrader_v2":[WORK,WORK,WORK,WORK,CARRY,MOVE],
+    "carrier_v2":[MOVE,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY],
+    "builder_v2":[WORK,WORK,WORK,WORK,CARRY,CARRY,MOVE],
+    "harvester_v2_s0":[WORK,WORK,WORK,WORK,WORK,MOVE],
+    "harvester_v2_s1":[WORK,WORK,WORK,WORK,WORK,MOVE],
     "harvester_v3_s0":[WORK,WORK,WORK,WORK,WORK,MOVE,CARRY],
-    "harvester_v3_s0":[WORK,WORK,WORK,WORK,WORK,MOVE,CARRY]
+    "harvester_v3_s1":[WORK,WORK,WORK,WORK,WORK,MOVE,CARRY],
   }
   
   //每种creep的已生产数量
   var creepnums = {
     "creep_v1":0,
     "creep_v2":0,
+	"creep_outside_v2":0,
+	"upgrader_v2":0,
+	"carrier_v2":0,
+	"builder_v2":0,
+    "harvester_v2_s0":0,
+    "harvester_v2_s1":0,
     "harvester_v3_s0":0,
-    "harvester_v3_s0":0
+    "harvester_v3_s1":0,
   }
 
   //统计每种creep的以生产数量
 	for(var name in Game.creeps)
   {
     creepnums[Game.creeps[name].memory.type]++;
+  }
+  for(var name in creepnums)
+  {
+	if(creepMax[name]!=0)
+	  console.log(name+ " "+creepnums[name]+"/"+creepMax[name])
   }
 
   var sourceN0 = 0;
@@ -101,9 +139,13 @@ module.exports.loop  = function(){
       sourceN0++;
     if(Game.creeps[name].memory.source == 1 && Game.creeps[name].memory.state == 'null')
       sourceN1++;
+
+	  showEnergyHarvested(Game.creeps[name],theRoomName)
+	  //Game.creeps[name].memory.energyHarvested = 0;
   }
-  Game.rooms[MainRooms[0]].memory.sourceSum[0]=sourceN0
-  Game.rooms[MainRooms[0]].memory.sourceSum[1]=sourceN1
+  Game.rooms[theRoomName].memory.sourceSum[0]=sourceN0
+  Game.rooms[theRoomName].memory.sourceSum[1]=sourceN1
+  console.log(Game.rooms[theRoomName].memory.sourceSum)
 
 
   var spawnQueue = []
@@ -113,10 +155,17 @@ module.exports.loop  = function(){
     if(creepnums[creepType]<creepMax[creepType])
       spawnQueue.push(creepType)
   }
-  Game.spawns['Spawn1'].spawnCreep(creepBody[spawnQueue[0]],
-    'creep#'+Game.time,{memory:{source:0,type:spawnQueue[0],state:'null'}});
+  if(spawnQueue.length != 0 )
+  Game.spawns[theRoomName].spawnCreep(creepBody[spawnQueue[0]],
+    'creep#'+Game.time,{memory:{source:-1,type:spawnQueue[0],state:'full',energyHarvested:0}});
 		
 	
+    //-------------------------------------------------------------------------------------
+    //可视化
+    //-------------------------------------------------------------------------------------
+
+
+
 	
     //-------------------------------------------------------------------------------------
     //管理creep行动
@@ -128,17 +177,23 @@ module.exports.loop  = function(){
 		switch(creep.memory.type){
 		case "creep_v1":
 		{
-			harvest_build_upgrade(creep,MainRooms[0])
+			harvest_build_upgrade(creep,theRoomName,Tower)
           break;
 		}
 		case "creep_v2":
 		{
-			harvest_build_upgrade(creep,MainRooms[0])
+			harvest_build_upgrade(creep,theRoomName,Tower)
           break;
+		}
+		case "creep_outside_v2":
+		{
+			harvest_build_upgrade_outside(creep,theRoomName,RoomsDictionary,RoomPosition)
+			
+		  break;
 		}
       case "harvester_v3_s0":
       {
-        var source = Game.getObjectById(Game.rooms[MainRooms[0]].memory.source[0].id)
+        var source = Game.getObjectById(Game.rooms[theRoomName].memory.source[0].id)
         if(creep.harvest(source)==ERR_NOT_IN_RANGE||creep.harvest(source)==ERR_NOT_ENOUGH_RESOURCES)
             creep.moveTo(source)
           
@@ -146,7 +201,7 @@ module.exports.loop  = function(){
       } 
       case "harvester_v3_s1":
       {
-        var source = Game.getObjectById(Game.rooms[MainRooms[0]].memory.source[1].id)
+        var source = Game.getObjectById(Game.rooms[theRoomName].memory.source[1].id)
         if(creep.harvest(source)==ERR_NOT_IN_RANGE||creep.harvest(source)==ERR_NOT_ENOUGH_RESOURCES)
             creep.moveTo(source)
         break;
@@ -155,14 +210,47 @@ module.exports.loop  = function(){
 		}
 		
 	}
-
+	}
 }
-var harvest_build_upgrade = function(creep,roomName)
+var harvest_build_upgrade = function(creep,roomName,Tower)
 {
 	setCreepEnergyStateEX(creep,roomName)
 	if(creep.memory.state=='full')
 	{
-		
+		if(StoreToSpawn(creep)==-1 )
+		{
+			if(( Tower.length == 0) || ( Tower[0].store.getFreeCapacity(RESOURCE_ENERGY)<200) ) {
+				if(Game.rooms[roomName].controller.ticksToDowngrade < 1000)
+					upgrade_and_move(creep,roomName)
+				else{
+					{
+						if(buildCloest(creep)==-1)
+							upgrade_and_move(creep,roomName)
+					}
+				}
+			}
+			else
+			{
+				if(creep.transfer(Tower[0],RESOURCE_ENERGY)==ERR_NOT_IN_RANGE	)
+					creep.moveTo(Tower[0])
+
+			}
+		}
+		//upgrade_and_move(creep,roomName)
+	}
+	else
+	{
+		var source = Game.getObjectById(Game.rooms[roomName].memory.source[(creep.memory.source==-1)?0:creep.memory.source].id)
+		if(creep.harvest(source)==ERR_NOT_IN_RANGE||creep.harvest(source)==ERR_NOT_ENOUGH_RESOURCES)
+			creep.moveTo(source)
+	}
+}
+
+var harvest_build_upgrade_outside = function(creep,roomName,RoomsDictionary,roomPosition)
+{
+	setCreepEnergyState(creep)
+	if(creep.memory.state=='full')
+	{
 		if(StoreToSpawn(creep)==-1 || creep.memory.source == 1)
 			if(buildCloest(creep)==-1)
 				upgrade_and_move(creep,roomName)
@@ -170,11 +258,19 @@ var harvest_build_upgrade = function(creep,roomName)
 	}
 	else
 	{
-		var source = Game.getObjectById(Game.rooms[roomName].memory.source[creep.memory.source].id)
-		if(creep.harvest(source)==ERR_NOT_IN_RANGE||creep.harvest(source)==ERR_NOT_ENOUGH_RESOURCES)
-			creep.moveTo(source)
+		var roomname = RoomsDictionary[roomName][0]
+		if(Game.rooms[roomname]!=null){
+			var source = Game.getObjectById(Game.rooms[roomname].memory.source[1].id)
+			if(creep.harvest(source)==ERR_NOT_IN_RANGE||creep.harvest(source)==ERR_NOT_ENOUGH_RESOURCES)
+				creep.moveTo(source)
+		}
+		else{
+			//console.log(roomPosition[roomname])
+			creep.moveTo(new RoomPosition( roomPosition[roomname][0][0], roomPosition[roomname][0][1], roomname))
+		}
 	}
 }
+
 
 
 var harvestOutside = function(container,source,creep)
@@ -285,8 +381,10 @@ var upgrade_and_move = function(creep,roomName)
 {
 	if(creep.upgradeController(Game.rooms[roomName].controller)==ERR_NOT_IN_RANGE)
 	{
-		creep.moveTo(Game.rooms[roomName].controller);
+		creep.moveTo(Game.rooms[roomName].controller)
+		
 	}
+	creep.moveTo(Game.rooms[roomName].controller);
 }
 
 var withdraw_From_Storage = function(creep,roomName)
@@ -316,7 +414,9 @@ var StoreToStorage = function(creep,roomName)
  */
 var setCreepEnergyState = function(creep)
 {
-  if(creep.store.getFreeCapacity(RESOURCE_ENERGY)==0)creep.memory.state = 'full';
+  if(creep.store.getFreeCapacity(RESOURCE_ENERGY)==0){creep.memory.state = 'full'
+  creep.memory.energyHarvested += creep.store.getUsedCapacity(RESOURCE_ENERGY)
+};
 	if(creep.store.getUsedCapacity(RESOURCE_ENERGY)==0)creep.memory.state = 'null';
 }
 
@@ -325,7 +425,34 @@ var setCreepEnergyState = function(creep)
 var setCreepEnergyStateEX = function(creep,roomName)
 {
   var sourceSum =  Game.rooms[roomName].memory.sourceSum
-  console.log(sourceSum)
+  //console.log(sourceSum)
+  //满了以后释放能量矿
+  if(creep.store.getFreeCapacity(RESOURCE_ENERGY)==0 && (creep.memory.state == 'null')){
+	creep.memory.energyHarvested += creep.store.getUsedCapacity(RESOURCE_ENERGY)
+    creep.memory.state = 'full';
+    Game.rooms[roomName].memory.sourceSum[creep.memory.source] -= 1
+  }
+  //空了以后预定能量矿
+	if(creep.store.getUsedCapacity(RESOURCE_ENERGY)==0 && (creep.memory.state == 'full')){
+    
+    creep.memory.state = 'null';
+
+	var max = (creep.memory.type == 'creep_v2')?8:4
+    if(sourceSum[0]<max){
+      creep.memory.source = 0
+      Game.rooms[roomName].memory.sourceSum[0] += 1
+    }
+    else{
+      creep.memory.source = 1
+      Game.rooms[roomName].memory.sourceSum[1] += 1
+    }
+  }
+}
+
+var setCreepEnergyStateOutside = function(creep,roomName)
+{
+  var sourceSum =  Game.rooms[roomName].memory.sourceSum
+  //console.log(sourceSum)
   //满了以后释放能量矿
   if(creep.store.getFreeCapacity(RESOURCE_ENERGY)==0 && (creep.memory.state == 'null')){
 
@@ -339,11 +466,11 @@ var setCreepEnergyStateEX = function(creep,roomName)
 	
 	var max = (creep.memory.type == 'creep_v2')?4:9
     if(sourceSum[0]<max){
-      creep.memory.source = 0
+      creep.memory.source = 1
       Game.rooms[roomName].memory.sourceSum[0] += 1
     }
     else{
-      creep.memory.source = 1
+      creep.memory.source = 0
       Game.rooms[roomName].memory.sourceSum[1] += 1
     }
   }
@@ -357,9 +484,7 @@ var buildCloest = function(creep)
 	if(target) {
 		if(creep.memory.source == 0){
 			
-		console.log("creep.build(target)")	
-		console.log(creep.build(target))	
-		console.log(target.pos)
+		//console.log("creep.build(target)"+creep.build(target)+target.pos)	
 	}
 
 		if(creep.build(target) == ERR_NOT_IN_RANGE) {
@@ -368,4 +493,11 @@ var buildCloest = function(creep)
 	}
 	else 
 		return -1
+}
+
+
+var showEnergyHarvested = function(creep,roomName)
+{
+	
+	Game.rooms[roomName].visual.text(creep.memory.energyHarvested,creep.pos, {color: '#FFFF00', fontSize: 0, opacity:0.3, fontVariant:'small-caps'})
 }
