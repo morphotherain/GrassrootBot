@@ -46,9 +46,6 @@ module.exports.loop  = function(){
 		filter: { structureType: STRUCTURE_TOWER }
 	}); 
 
-	var container = Game.spawns[theRoomName].room.find(FIND_MY_STRUCTURES, {
-		filter: { structureType: STRUCTURE_CONTAINER }
-	}); 
 
 
 	if(Tower != 0)
@@ -63,6 +60,25 @@ module.exports.loop  = function(){
   if(!Game.rooms[theRoomName].memory.sourceSum)
     InitSourceSum(theRoomName)
 
+	var container = Game.spawns[theRoomName].room.find(FIND_MY_STRUCTURES, {
+		filter: { structureType: STRUCTURE_CONTAINER }
+	}); 
+	if(Game.rooms[theRoomName].memory.containerForSource == undefined )
+	{
+		var container = []
+		container.push(Game.getObjectById(Game.rooms[theRoomName].memory.source[0].id).pos.findClosestByRange(FIND_STRUCTURES,{
+			filter: { structureType: 'container' }}))
+		container.push(Game.getObjectById(Game.rooms[theRoomName].memory.source[1].id).pos.findClosestByRange(FIND_STRUCTURES,{
+			filter: { structureType: 'container' }}))
+		Game.rooms[theRoomName].memory.containerForSource = container
+	}if(Game.rooms[theRoomName].memory.containerForUpgrade == undefined )
+	{
+		var container = []
+		container.push(Game.rooms[theRoomName].controller.pos.findClosestByRange(FIND_STRUCTURES,{
+			filter: { structureType: 'container' }}))
+		Game.rooms[theRoomName].memory.containerForUpgrade = container
+	}
+	console.log("container"+Game.rooms[theRoomName].memory.containerForSource)
 	console.log("能量",Game.rooms[theRoomName].energyAvailable,"/",Game.rooms[theRoomName].energyCapacityAvailable);
 
 
@@ -80,14 +96,14 @@ module.exports.loop  = function(){
 
   var creepMax = {
     "creep_v1": (ECA<550 ) ?                       8 : 0 + 
-				(EA == 300 && Object.keys(Game.creeps).length==0 && ECA > 300),
-    "creep_v2": (ECA >= 550 && ECA <1300) ?         12  : 0,
+				(EA < 550 && Object.keys(Game.creeps).length==0 && ECA > 300),
+    "creep_v2": (ECA >= 550 && ECA <1300 && ( Game.rooms[theRoomName].memory.containerForSource<2 )) ?         12  : 0,
 	"creep_outside_v2": (ECA >= 550 && ECA <1300) ? 4  : 0,
-    "upgrader_v2":(ECA >= 550 && ECA <800)?       0  : 0,
-    "carrier_v2":(ECA >= 550 && ECA <800)?       0  : 0,
-    "builder_v2":(ECA >= 550 && ECA <800)?       0  : 0,
-    "harvester_v2_s0":(ECA >= 550 && ECA <800)?     0  : 0,
-    "harvester_v2_s1":(ECA >= 550 && ECA <800)?     0  : 0,
+    "upgrader_v2":(ECA >= 550 && ECA <800 && ( Game.rooms[theRoomName].memory.containerForSource<2 ))?       2  : 0,
+    "carrier_v2":(ECA >= 550 && ECA <800 && ( Game.rooms[theRoomName].memory.containerForSource<2 ))?       2 : 0,
+    "builder_v2":(ECA >= 550 && ECA <800 && ( Game.rooms[theRoomName].memory.containerForSource<2 ))?       0  : 0,
+    "harvester_v2_s0":(ECA >= 550 && ECA <800 && ( Game.rooms[theRoomName].memory.containerForSource<2 ))?     1  : 0,
+    "harvester_v2_s1":(ECA >= 550 && ECA <800 && ( Game.rooms[theRoomName].memory.containerForSource<2 ))?     1  : 0,
     "harvester_v3_s0":(ECA >= 1300)?                1  : 0,
     "harvester_v3_s1":(ECA >= 1300)?                1  : 0,
   }
@@ -139,7 +155,7 @@ module.exports.loop  = function(){
       sourceN0++;
     if(Game.creeps[name].memory.source == 1 && Game.creeps[name].memory.state == 'null')
       sourceN1++;
-
+	if(Game.creeps[name].memory.type != 'creep_outside_v2')
 	  showEnergyHarvested(Game.creeps[name],theRoomName)
 	  //Game.creeps[name].memory.energyHarvested = 0;
   }
@@ -191,20 +207,92 @@ module.exports.loop  = function(){
 			
 		  break;
 		}
+		case "upgrader_v2":
+		{
+			setCreepEnergyState(creep)
+			var __container = Game.getObjectById(Game.rooms[theRoomName].memory.containerForUpgrade.id)
+			if(creep.memory.state == 'null')
+			{
+				if(creep.withdraw(__container,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE)
+					creep.moveTo(__container)
+			}
+			else
+			{
+				if(creep.upgrade(Game.rooms[theRoomName].controller)==ERR_NOT_IN_RANGE)
+					creep.moveTo(__container)
+			}
+		  break;
+		}
+		case "carrier_v2":
+		{
+			var contianer0 = Game.getObjectById(Game.rooms[theRoomName].memory.containerForSource[0].id)
+			var contianer1 = Game.getObjectById(Game.rooms[theRoomName].memory.containerForSource[1].id)
+				
+			if(creep.store.getFreeCapacity(RESOURCE_ENERGY)==0){
+				creep.memory.state = 'full'
+				creep.memory.energyHarvested += creep.store.getUsedCapacity(RESOURCE_ENERGY)
+			};
+			if(creep.store.getUsedCapacity(RESOURCE_ENERGY)==0){
+				creep.memory.state = 'null';
+				if(contianer0.getFreeCapacity()<contianer1.getFreeCapacity())
+				{
+					creep.memory.source = 0;
+				}
+				else
+				{
+					creep.memory.source = 1
+				}
+			}
+			if(creep.memory.state == 'full')
+			{
+				if(StoreToSpawn(creep)==-1 )
+				{
+					if(( Tower.length == 0) || ( Tower[0].store.getFreeCapacity(RESOURCE_ENERGY)<200) ) {
+						var __container = Game.getObjectById(Game.rooms[theRoomName].memory.containerForUpgrade.id)
+						if(creep.transfer(__container,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE	)
+							creep.moveTo(__container)
+					}
+					else
+					{
+						if(creep.transfer(Tower[0],RESOURCE_ENERGY)==ERR_NOT_IN_RANGE	)
+							creep.moveTo(Tower[0])
+
+					}
+				}
+				//upgrade_and_move(creep,roomName)
+			}
+			else
+			{
+				var _container = (creep.memory.source == 0)? contianer0:contianer1
+				if(creep.withdraw(_container,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE)
+					creep.moveTo(_container);
+			}
+			
+		  break;
+		}
+		case "builder_v2":
+		{
+		  break;
+		}
+		case "harvester_v2_s0":
+		{
+			harvest_with_container(creep,theRoomName,0)
+		  break;
+		}
+		case "harvester_v2_s1":
+		{
+			harvest_with_container(creep,theRoomName,1)
+		  break;
+		}
       case "harvester_v3_s0":
       {
-        var source = Game.getObjectById(Game.rooms[theRoomName].memory.source[0].id)
-        if(creep.harvest(source)==ERR_NOT_IN_RANGE||creep.harvest(source)==ERR_NOT_ENOUGH_RESOURCES)
-            creep.moveTo(source)
-          
+		harvest_with_container(creep,theRoomName,0)
         break;
       } 
       case "harvester_v3_s1":
       {
-        var source = Game.getObjectById(Game.rooms[theRoomName].memory.source[1].id)
-        if(creep.harvest(source)==ERR_NOT_IN_RANGE||creep.harvest(source)==ERR_NOT_ENOUGH_RESOURCES)
-            creep.moveTo(source)
-        break;
+		harvest_with_container(creep,theRoomName,1)
+		break;
       } 
 			default:{}
 		}
@@ -212,6 +300,16 @@ module.exports.loop  = function(){
 	}
 	}
 }
+
+var harvest_with_container = function(creep,theRoomName,index)
+{
+	var source = Game.getObjectById(Game.rooms[theRoomName].memory.source[index].id)
+	var container = Game.getObjectById(Game.rooms[theRoomName].memory.containerForSource[index].id)
+	if(creep.harvest(source)==ERR_NOT_IN_RANGE||creep.harvest(source)==ERR_NOT_ENOUGH_RESOURCES)
+		creep.moveTo(container)
+}
+
+
 var harvest_build_upgrade = function(creep,roomName,Tower)
 {
 	setCreepEnergyStateEX(creep,roomName)
@@ -223,10 +321,10 @@ var harvest_build_upgrade = function(creep,roomName,Tower)
 				if(Game.rooms[roomName].controller.ticksToDowngrade < 1000)
 					upgrade_and_move(creep,roomName)
 				else{
-					{
+					
 						if(buildCloest(creep)==-1)
 							upgrade_and_move(creep,roomName)
-					}
+					
 				}
 			}
 			else
@@ -331,6 +429,7 @@ var StoreToRoomSpawn = function(creep,roomName) {
 	}
 	// body...
 }
+
 var TowerOperator = function(Tower,roomName)
 {
 	const Attack_target = Tower.pos.findClosestByRange(FIND_HOSTILE_CREEPS);
@@ -377,6 +476,7 @@ var upgrade = function(creep,roomName)
 {
 	creep.upgradeController(Game.rooms[roomName].controller)
 }
+
 var upgrade_and_move = function(creep,roomName)
 {
 	if(creep.upgradeController(Game.rooms[roomName].controller)==ERR_NOT_IN_RANGE)
@@ -400,7 +500,6 @@ var withdraw_From_Container_By_id = function(ContainerID,creep)
 			creep.moveTo(Game.getObjectById(ContainerID));
 }
 
-
 var StoreToStorage = function(creep,roomName)
 {
 	if(creep.transfer(Game.rooms[roomName].storage,RESOURCE_ENERGY)==ERR_NOT_IN_RANGE)
@@ -419,7 +518,6 @@ var setCreepEnergyState = function(creep)
 };
 	if(creep.store.getUsedCapacity(RESOURCE_ENERGY)==0)creep.memory.state = 'null';
 }
-
 
 //切换creep_v1状态且自动分配能量矿
 var setCreepEnergyStateEX = function(creep,roomName)
@@ -477,7 +575,6 @@ var setCreepEnergyStateOutside = function(creep,roomName)
 }
 
 
-
 var buildCloest = function(creep)
 {
 	const target = creep.pos.findClosestByRange(FIND_CONSTRUCTION_SITES);
@@ -494,7 +591,6 @@ var buildCloest = function(creep)
 	else 
 		return -1
 }
-
 
 var showEnergyHarvested = function(creep,roomName)
 {
